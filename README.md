@@ -1,7 +1,7 @@
 # XLetxzX Styles 1.0 (Minecraft 1.21.11 / Fabric)
 
 One mod file: `XLetxzX-Styles-1.0-1.21.11.jar` (needs Fabric API).
-Menu key: Right Shift (change it under Options > Controls > Key Binds > Miscellaneous).
+Menu key: Right Shift, zoom: C (change both under Options > Controls > Key Binds > XLetxzX Styles).
 
 ## Parts
 - `menu/` (java, res) - the XLetxzX menu (Home with skin, Extras, Packs, Mods, looks, themes, backgrounds). Yarn names.
