@@ -1,6 +1,8 @@
 package de.xletxzx.styles.mixin;
 
+import de.xletxzx.styles.Bridge;
 import de.xletxzx.styles.SelfArmor;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
@@ -20,6 +22,23 @@ public abstract class SelfStateMixin {
     private void xletxzx$mark(LivingEntity entity, LivingEntityRenderState state, float partial, CallbackInfo ci) {
         boolean self = entity == Minecraft.getInstance().player;
         SelfArmor.mark(state, self);
+        if (self && Bridge.menuPreview) {
+            // skin preview in the XLetxzX menu: always just the plain skin
+            state.displayFireAnimation = false;
+            state.nameTag = null;
+            state.outlineColor = 0;
+            state.isInvisible = false;
+            state.isInvisibleToPlayer = false;
+            state.hasRedOverlay = false;
+            state.deathTime = 0;
+            state.isFullyFrozen = false;
+            if (state instanceof AvatarRenderState a) {
+                a.arrowCount = 0;
+                a.stingerCount = 0;
+                a.scoreText = null;
+            }
+            return;
+        }
         if (self) {
             Config.Nick n = Config.get().nick;
             if (n.on && n.name != null && !n.name.isBlank() && !Minecraft.getInstance().options.getCameraType().isFirstPerson()) {
