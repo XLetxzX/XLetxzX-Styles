@@ -12,20 +12,34 @@ import java.nio.file.Path;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-/** Reads single files from resource packs (folders or ZIPs). */
+/** Reads single files from resource packs (folders or ZIPs, also packs in a sub folder of the zip). */
 final class PackFiles {
     private PackFiles() {}
+
+    /** Where a pack really is on disk. */
+    static Path location(String pack) {
+        PackManager.Pack p = PackManager.get(pack);
+        if (p != null && p.real != null) return p.real;
+        if (pack.startsWith("ext:")) return Path.of(pack.substring(4));
+        return PackManager.dir().resolve(pack);
+    }
+
+    static String prefix(String pack) {
+        PackManager.Pack p = PackManager.get(pack);
+        return p == null ? "" : p.prefix;
+    }
 
     /** path is relative to the pack root, e.g. "pack.png" or "assets/minecraft/textures/item/totem_of_undying.png". */
     static byte[] read(String pack, String path) {
         try {
-            Path f = PackManager.dir().resolve(pack);
+            Path f = location(pack);
+            String full = prefix(pack) + path;
             if (Files.isDirectory(f)) {
-                Path p = f.resolve(path);
+                Path p = f.resolve(full);
                 return Files.exists(p) ? Files.readAllBytes(p) : null;
             }
-            try (ZipFile z = new ZipFile(f.toFile())) {
-                ZipEntry e = z.getEntry(path);
+            try (ZipFile z = PackManager.openZip(f)) {
+                ZipEntry e = z.getEntry(full);
                 if (e == null) return null;
                 try (InputStream in = z.getInputStream(e)) { return in.readAllBytes(); }
             }

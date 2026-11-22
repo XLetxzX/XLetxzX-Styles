@@ -56,6 +56,14 @@ final class PacksPanel {
         cube("anchor");
         t("glowstone", "Glowstone", Items.GLOWSTONE, "block/glowstone");
         cube("glowstone");
+        t("crying_obsidian", "Crying Obsidian", Items.CRYING_OBSIDIAN, "block/crying_obsidian");
+        cube("crying_obsidian");
+        t("explosion", "Explosion", Items.FIRE_CHARGE, "particle/explosion_0", "particle/explosion_1", "particle/explosion_2",
+            "particle/explosion_3", "particle/explosion_4", "particle/explosion_5", "particle/explosion_6", "particle/explosion_7",
+            "particle/explosion_8", "particle/explosion_9", "particle/explosion_10", "particle/explosion_11", "particle/explosion_12",
+            "particle/explosion_13", "particle/explosion_14", "particle/explosion_15");
+        t("hit_particles", "Hit Particles", Items.IRON_SWORD, "particle/critical_hit", "particle/enchanted_hit");
+        t("crystal_beam", "Crystal Beam", Items.END_ROD, "entity/end_crystal/end_crystal_beam");
         t("totem", "Totem", Items.TOTEM_OF_UNDYING, "item/totem_of_undying");
         t("netherite_armor", "Netherite Armor", Items.NETHERITE_CHESTPLATE, "item/netherite_chestplate", "item/netherite_helmet",
             "item/netherite_leggings", "item/netherite_boots", "entity/equipment/humanoid/netherite",
@@ -151,8 +159,9 @@ final class PacksPanel {
     }
 
     static final Cat[] PVP = {
-        new Cat("Crystal PvP", "End crystals, obsidian, anchors and glowstone", Items.END_CRYSTAL,
-            "crystal", "obsidian", "anchor", "glowstone", "cobweb"),
+        new Cat("Crystal PvP", "Crystals, obsidian, anchors, explosions and more", Items.END_CRYSTAL,
+            "crystal", "obsidian", "crying_obsidian", "anchor", "glowstone", "bedrock", "cobweb",
+            "explosion", "hit_particles", "crystal_beam", "totem", "gapple", "pearl", "xp"),
         new Cat("Totems & items", "Totems, gapples, pearls, potions and food", Items.TOTEM_OF_UNDYING,
             "totem", "gapple", "pearl", "xp", "potion", "wind_charge", "firework", "steak", "golden_carrot"),
         new Cat("Spear PvP", "Spears, mace, axes, wind charges and shields", Items.NETHERITE_SPEAR,
@@ -187,6 +196,32 @@ final class PacksPanel {
     private static boolean scannedOnce;
     private static Map<String, String> applied;
     static boolean dirty;
+    /**
+     * Choices that are only previewed, not used yet (tile id -> pack file, null = vanilla).
+     * They become real only with "Apply changes".
+     */
+    private static final Map<String, String> PENDING = new LinkedHashMap<>();
+
+    /** The pack a tile shows: the previewed choice if there is one, otherwise the used one. */
+    private static String choice(String tile) { return PENDING.containsKey(tile) ? PENDING.get(tile) : mix().get(tile); }
+
+    private static boolean hasChoice(String tile) { return choice(tile) != null; }
+
+    /** Remembers a choice as preview only. */
+    private static void pick(String tile, String pack) {
+        if (Objects.equals(pack, mix().get(tile))) PENDING.remove(tile); else PENDING.put(tile, pack);
+        dirty = !PENDING.isEmpty();
+    }
+
+    /** "Apply changes": the previewed choices are used from now on. */
+    private void commit() {
+        for (Map.Entry<String, String> e : PENDING.entrySet()) {
+            if (e.getValue() == null) mix().remove(e.getKey()); else mix().put(e.getKey(), e.getValue());
+        }
+        PENDING.clear();
+        Config.save();
+        apply();
+    }
 
     private final Minecraft mc = Minecraft.getInstance();
     private final Font font = mc.font;
@@ -209,32 +244,36 @@ final class PacksPanel {
         return applied;
     }
 
+    /** Finds all packs and reads which textures each one has. Runs in the background (also once at game start). */
     static void rescanPacks() {
         if (scanning) return;
         scanning = true;
         scannedOnce = true;
-        PackManager.scan();
-        Gfx.forget();
-        List<PackManager.Pack> list = new ArrayList<>(PackManager.packs);
-        scanTotal = list.size();
+        scanTotal = 0;
         scanDone = 0;
         Thread th = new Thread(() -> {
+            try { PackManager.scan(); } catch (Throwable t) { System.err.println("[XLetxzX] Pack scan failed: " + t); }
+            Gfx.forget();
+            List<PackManager.Pack> list = new ArrayList<>(PackManager.packs);
+            scanTotal = list.size();
             Map<String, Map<String, List<String>>> out = new HashMap<>();
             for (PackManager.Pack p : list) {
                 Map<String, List<String>> found = new HashMap<>();
                 try {
-                    Path f = PackManager.dir().resolve(p.file);
+                    Path f = p.real != null ? p.real : PackManager.dir().resolve(p.file);
+                    String pre = p.prefix == null ? "" : p.prefix;
                     Set<String> entries = new HashSet<>();
                     if (p.dir) {
                         for (Tile t : TILES.values())
                             for (String tp : t.paths)
-                                if (Files.exists(f.resolve("assets/minecraft/" + tp))) entries.add("assets/minecraft/" + tp);
+                                if (Files.exists(f.resolve(pre + "assets/minecraft/" + tp))) entries.add("assets/minecraft/" + tp);
                     } else {
-                        try (ZipFile z = new ZipFile(f.toFile())) {
+                        try (ZipFile z = PackManager.openZip(f)) {
                             Enumeration<? extends ZipEntry> en = z.entries();
+                            String want = pre + "assets/minecraft/textures/";
                             while (en.hasMoreElements()) {
                                 String n = en.nextElement().getName();
-                                if (n.startsWith("assets/minecraft/textures/")) entries.add(n);
+                                if (n.startsWith(want)) entries.add(n.substring(pre.length()));
                             }
                         }
                     }
@@ -285,6 +324,22 @@ final class PacksPanel {
     /** Draws the texture a pack has for a tile (3D block, animated). Falls back to the item. */
     private void drawPreview(Tile t, String pack, int cx, int cy, int size) {
         size = Math.max(16, size / 16 * 16);
+        if (t.id.equals("crystal")) {
+            // crystal: normal obsidian block with the (pack's) end crystal turning above it, like in the game
+            String ent = null;
+            if (pack != null) {
+                Map<String, List<String>> m = index.get(pack);
+                List<String> have = m == null ? null : m.get(t.id);
+                if (have != null) for (String hp : have) if (hp.endsWith("entity/end_crystal/end_crystal.png")) ent = hp;
+            }
+            if (Gfx.crystalScene(Ui.g, ent == null ? null : pack, ent, cx, cy, size)) return;
+        }
+        if (pack == null && t.cube) {
+            // vanilla block: same 3D look as the pack blocks
+            String top = t.paths[0], side = t.paths.length > 1 ? t.paths[1] : t.paths[0];
+            int tint = top.endsWith("grass_block_top.png") ? 0xFF91BD59 : 0xFFFFFFFF;
+            if (Gfx.cubeVanilla(Ui.g, top, side, cx, cy, size, tint)) return;
+        }
         if (pack != null) {
             Map<String, List<String>> m = index.get(pack);
             List<String> have = m == null ? null : m.get(t.id);
@@ -292,11 +347,14 @@ final class PacksPanel {
                 boolean ok;
                 if (t.cube) {
                     String top = have.get(0), side = have.size() > 1 ? have.get(1) : top;
-                    ok = Gfx.cube(Ui.g, pack, top, side, cx, cy, size);
+                    // grass top is grey in every pack and coloured by the game: colour it like plains grass
+                    int tint = top.endsWith("grass_block_top.png") ? 0xFF91BD59 : 0xFFFFFFFF;
+                    ok = Gfx.cube(Ui.g, pack, top, side, cx, cy, size, tint);
                 } else {
                     // only flat item / block textures; entity textures (shield, elytra ...) are unwrapped model skins
                     String flat = null;
-                    for (String hp : have) if (hp.contains("textures/item/") || hp.contains("textures/block/") || hp.contains("textures/gui/")) { flat = hp; break; }
+                    for (String hp : have) if (hp.contains("textures/item/") || hp.contains("textures/block/") || hp.contains("textures/gui/")
+                            || hp.contains("textures/particle/") || hp.endsWith("end_crystal_beam.png")) { flat = hp; break; }
                     if (flat != null) {
                         int[] d = flat.contains("textures/gui/") ? pngSize(pack, flat) : null;
                         if (d != null && d[0] > 0 && d[1] > 0 && d[0] != d[1]) {
@@ -341,7 +399,7 @@ final class PacksPanel {
 
     private static int changed(Cat c) {
         int n = 0;
-        for (String t : c.tiles) if (mix().containsKey(t)) n++;
+        for (String t : c.tiles) if (hasChoice(t)) n++;
         return n;
     }
 
@@ -350,7 +408,7 @@ final class PacksPanel {
         String q = search.toLowerCase(Locale.ROOT).trim();
         for (String id : cat.tiles) {
             Tile t = TILES.get(id);
-            String chosen = mix().get(id);
+            String chosen = choice(id);
             if (filter == 1 && chosen == null) continue;
             if (filter == 2 && !Config.get().favTiles.contains(id)) continue;
             if (!q.isEmpty() && !t.name.toLowerCase(Locale.ROOT).contains(q)
@@ -403,7 +461,7 @@ final class PacksPanel {
         for (Cat c : PVP) Collections.addAll(all, c.tiles);
         for (Cat c : ALL) Collections.addAll(all, c.tiles);
         int ch = 0;
-        for (String t : all) if (mix().containsKey(t)) ch++;
+        for (String t : all) if (hasChoice(t)) ch++;
         Ui.text("Your TxT setup", x + 9, y + 8, 0xFFFFFFFF);
         Ui.text(ch + " / " + all.size() + " changed", x + 9, y + 19, Ui.accent());
         int bw = w - 18;
@@ -425,12 +483,13 @@ final class PacksPanel {
         int by = y + h - bottomH + 4;
         Ui.text(index.size() + " packs found", x + 9, by, Ui.dim());
         by += 12;
-        if (Ui.button(dirty ? "Apply changes" : "Applied", x + 6, by, w - 12, 16, dirty)) {
-            if (dirty) after = this::apply;
+        if (Ui.button(dirty ? "Apply changes (" + PENDING.size() + ")" : "Applied", x + 6, by, w - 12, 16, dirty)) {
+            if (dirty) after = this::commit;
         }
         by += 18;
-        if (Ui.button("Reset all", x + 6, by, w - 12, 16, false)) {
-            mix().clear(); Config.save(); dirty = true; toast("All textures back to vanilla.");
+        if (Ui.button(dirty ? "Discard preview" : "Reset all", x + 6, by, w - 12, 16, false)) {
+            if (dirty) { PENDING.clear(); dirty = false; toast("Preview discarded."); }
+            else { for (String k : new ArrayList<>(mix().keySet())) PENDING.put(k, null); dirty = !PENDING.isEmpty(); toast("Preview: all vanilla - click Apply to use it."); }
         }
     }
 
@@ -491,7 +550,8 @@ final class PacksPanel {
     }
 
     private void status(int x, int y, int w) {
-        String s = scanning ? "Reading packs " + scanDone + "/" + scanTotal : PackManager.packs.size() + " packs";
+        String s = scanning ? "Reading packs " + scanDone + "/" + scanTotal
+            : PackManager.packs.size() + " packs  ·  " + index.size() + " with textures for TxT";
         int sw = font.width(s);
         Ui.text(s, x + w - sw, y, Ui.dim());
         if (scanning && scanTotal > 0) {
@@ -501,16 +561,15 @@ final class PacksPanel {
     }
 
     private void tile(Tile t, int x, int y, int w, int h) {
-        String chosen = mix().get(t.id);
+        String chosen = choice(t.id);
         boolean hv = Ui.hover(x, y, w, h);
-        Ui.card(x, y, w, h, hv, false);
-        if (chosen != null) Ui.grad(x + 1, y + 1, w - 2, 3, Ui.accent(), Ui.alpha(Ui.accent(), 120));
+        Ui.card(x, y, w, h, hv, chosen != null);
 
+        // how many packs offer this texture: small calm pill
         String n = String.valueOf(count(t.id));
-        int tw = Ui.w(n), nw = Math.max(15, tw + 8), bx = x + w - nw - 5, by = y + 6;
-        Ui.fill(bx, by, nw, 13, 0xAA000000);
-        Ui.border(bx, by, nw, 13, 0x22FFFFFF);
-        Ui.text(n, bx + (nw - tw) / 2, by + 3, 0xFFDDDDEE);
+        int tw = Ui.w(n), nw = Math.max(16, tw + 10), bx = x + w - nw - 6, by = y + 6;
+        Ui.rrect(bx, by, nw, 12, 6, 0x66000000);
+        Ui.text(n, bx + (nw - tw) / 2, by + 2, 0xFFC8CAD8);
         boolean fav = Config.get().favTiles.contains(t.id);
         boolean shv = Ui.hover(x + 4, y + 6, 11, 11);
         if (fav || hv) Ui.text("★", x + 6, y + 8, fav ? 0xFFFFD27A : (shv ? 0xFFFFFFFF : 0x66FFFFFF));
@@ -518,15 +577,12 @@ final class PacksPanel {
         int area = h - 36;
         int size = Math.max(24, Math.min(area - 6, w - 34));
         int cx = x + w / 2, cy = y + 8 + area / 2;
-        // glow behind the item
-        Ui.g.fillGradient(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2, Ui.alpha(Ui.accent(), hv ? 40 : 18), 0x00000000);
-        boolean preview = chosen != null;
-        if (preview) drawPreview(t, chosen, cx, cy, size);
-        else drawItem(t.stack(), cx, cy, size / 16f);
+        drawPreview(t, chosen, cx, cy, size);   // vanilla (null) is drawn in the same style as pack textures
 
         Ui.text(Ui.fit(t.name, w - 12), x + 7, y + h - 25, 0xFFFFFFFF);
-        Ui.text(Ui.fit(chosen == null ? "Vanilla" : packName(chosen), w - 12), x + 7, y + h - 13,
-            chosen == null ? Ui.dim() : Ui.accent());
+        String sub = chosen == null ? "Vanilla" : packName(chosen);
+        if (PENDING.containsKey(t.id)) sub = "Preview: " + sub;
+        Ui.text(Ui.fit(sub, w - 12), x + 7, y + h - 13, chosen == null && !PENDING.containsKey(t.id) ? Ui.dim() : Ui.accent());
 
         if (hv && Ui.pressed) {
             Ui.pressed = false;
@@ -539,18 +595,19 @@ final class PacksPanel {
         }
         if (hv && Ui.rpressed && chosen != null) {
             Ui.rpressed = false;
-            mix().remove(t.id); Config.save(); dirty = true;
+            pick(t.id, null);
         }
     }
 
     // ---------------------------------------------------------------- chooser
     private void chooser(int x, int y, int w, int h) {
         Tile t = TILES.get(picking);
-        String chosen = mix().get(t.id);
+        String chosen = choice(t.id);
         Ui.g.renderItem(t.stack(), x, y + 3);
         Ui.text(t.name, x + 21, y + 4, 0xFFFFFFFF);
         Ui.text("Pick a style", x + 21, y + 16, Ui.dim());
         if (Ui.button("Back", x + w - 52, y + 21, 52, 15, false)) { picking = null; return; }
+        if (dirty && Ui.button("Apply changes", x + w - 150, y + 21, 94, 15, true)) after = this::commit;
 
         String q = search.toLowerCase(Locale.ROOT).trim();
         List<String> packs = new ArrayList<>();
@@ -558,7 +615,7 @@ final class PacksPanel {
         for (String f : offering(t.id)) if (q.isEmpty() || packName(f).toLowerCase(Locale.ROOT).contains(q)) packs.add(f);
 
         int top = y + 42, gh = h - 42 - 14, gap = 7;
-        int sideW = w >= 330 ? 96 : 0;
+        int sideW = w >= 330 ? Math.max(120, Math.min(170, w * 26 / 100)) : 0;
         int gx = x + (sideW > 0 ? sideW + 8 : 0), gw = w - (gx - x);
         if (sideW > 0) skinPreview(t, x, top, sideW, gh);
         int cols = Math.max(2, Math.min(6, (gw + gap) / (100 + gap)));
@@ -575,16 +632,14 @@ final class PacksPanel {
             Ui.card(px, py, cw, chh, hv, sel);
             int size = Math.max(24, Math.min(chh - 38, cw - 30));
             int cx = px + cw / 2, cy = py + 6 + (chh - 30) / 2;
-            Ui.g.fillGradient(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2, Ui.alpha(Ui.accent(), hv ? 40 : 16), 0x00000000);
-            if (f == null) drawItem(t.stack(), cx, cy, size / 16f);
-            else drawPreview(t, f, cx, cy, size);
+            drawPreview(t, f, cx, cy, size);
             Ui.text(Ui.fit(f == null ? "Vanilla" : packName(f), cw - 12), px + 7, py + chh - 24, 0xFFFFFFFF);
-            Ui.text(sel ? "Selected" : (f == null ? "Default" : "Click to use"), px + 7, py + chh - 12, sel ? Ui.accent() : Ui.dim());
+            boolean used = Objects.equals(f, mix().get(t.id));
+            String st = sel ? (used ? "In use" : "Preview - not applied") : (used ? "In use" : (f == null ? "Default" : "Click to preview"));
+            Ui.text(Ui.fit(st, cw - 12), px + 7, py + chh - 12, sel ? Ui.accent() : Ui.dim());
             if (hv && Ui.pressed) {
                 Ui.pressed = false;
-                if (f == null) mix().remove(t.id); else mix().put(t.id, f);
-                Config.save();
-                dirty = true;
+                pick(t.id, f);
             }
         }
         Ui.unclip();
@@ -609,6 +664,14 @@ final class PacksPanel {
         if (Ui.button(scanning ? "Scanning..." : "Rescan", bx, y + 2, 64, 16, true)) { rescanPacks(); toast("Packs rescanned."); }
         if (Ui.button("Folder", bx + 68, y + 2, 52, 16, false)) { try { OpenUtil.open(PackManager.dir()); } catch (Exception ignored) {} }
         if (Ui.button("All off", bx + 124, y + 2, 52, 16, false)) PackManager.disableAll();
+        Config cfg = Config.get();
+        String ev = cfg.packsEverywhere ? "Other folders: on" : "Other folders: off";
+        if (Ui.button(ev, bx + 180, y + 2, Ui.w(ev) + 14, 16, cfg.packsEverywhere)) {
+            cfg.packsEverywhere = !cfg.packsEverywhere;
+            Config.save();
+            rescanPacks();
+            toast(cfg.packsEverywhere ? "Also showing packs from your other Minecraft folders." : "Only your own pack folder.");
+        }
         int fx = x + w;
         for (int i = PACK_FILTERS.length - 1; i >= 0; i--) {
             int bw = font.width(PACK_FILTERS[i]) + 14;
@@ -649,10 +712,14 @@ final class PacksPanel {
             String d = descs.getOrDefault(p.file, "");
             Ui.text(Ui.fit(d.isEmpty() ? PackManager.sizeText(p) : d, cw - 86), px + 46, py + 22, Ui.dim());
             if (p.nested()) {
-                Ui.text("\u25B8 " + Ui.fit(p.folder, cw - 140), px + 46, py + 33, Ui.dim());
-                if (Ui.button("Use", px + cw - 44, py + 15, 38, 15, false)) {
+                Ui.text("\u25B8 " + Ui.fit(p.folder.isEmpty() ? "TxT only" : p.folder, cw - 140), px + 46, py + 33, Ui.dim());
+                if (p.movable() && Ui.button("Use", px + cw - 44, py + 15, 38, 15, false)) {
                     PackManager.Pack fp = p;
-                    after = () -> { if (PackManager.moveToTop(fp)) { rescanPacks(); toast("Moved to your main pack folder."); } else toast("Could not move the pack."); };
+                    boolean copy = fp.external || fp.virtual;
+                    after = () -> {
+                        if (PackManager.moveToTop(fp)) { rescanPacks(); toast(copy ? "Copied to your main pack folder." : "Moved to your main pack folder."); }
+                        else toast("Could not use the pack (maybe it is already there).");
+                    };
                 }
             } else {
                 Ui.text(on ? "Active" : "", px + 46, py + 33, Ui.accent());
@@ -675,9 +742,21 @@ final class PacksPanel {
 
     void scrollManager(double amount) { listScroll = Math.max(0, Math.min(listMax, listScroll - (int) (amount * 26))); }
 
-    /** Your own skin on the left, holding the item / block of this tile. */
+    /**
+     * Left box: when a style is only previewed, it is shown big here (how it would look);
+     * otherwise your own skin holding the item as it is now.
+     */
     private void skinPreview(Tile t, int x, int y, int w, int h) {
         Ui.card(x, y, w, h, false, false);
+        if (PENDING.containsKey(t.id)) {
+            String f = PENDING.get(t.id);
+            int size = Math.max(32, Math.min(w - 16, h - 56));
+            drawPreview(t, f, x + w / 2, y + 10 + (h - 40) / 2, size);
+            Ui.textC("Preview", x + w / 2, y + 8, Ui.accent());
+            Ui.textC(Ui.fit(f == null ? "Vanilla" : packName(f), w - 8), x + w / 2, y + h - 24, 0xFFFFFFFF);
+            Ui.textC("Apply to use it", x + w / 2, y + h - 13, Ui.dim());
+            return;
+        }
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         net.minecraft.client.player.LocalPlayer pl = mc.player;
         if (pl == null) return;
@@ -687,17 +766,21 @@ final class PacksPanel {
         try {
             inv.setItem(sel, t.stack().copy());
             inv.setItem(40, ItemStack.EMPTY);
-            int sc = Math.max(20, Math.min((int) (h * 0.36f), w - 24));
+            Bridge.menuPreview = true;   // plain skin: no fire, name tag ...
+            // as big as the box allows (a player is about 2 blocks high, the item sticks out to the side)
+            int sc = Math.max(24, Math.min((int) ((h - 30) * 0.46f), (int) (w * 0.62f)));
             Ui.g.enableScissor(x + 1, y + 1, x + w - 1, y + h - 1);
             net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventoryFollowsMouse(
-                Ui.g, x + 2, y + 6, x + w - 2, y + h - 18, sc, 0.0625f, (float) Ui.mx, (float) Ui.my, pl);
+                Ui.g, x + 2, y + 4, x + w - 2, y + h - 20, sc, 0.0625f, (float) Ui.mx, (float) Ui.my, pl);
             Ui.g.disableScissor();
         } catch (Throwable ignored) {
         } finally {
+            Bridge.menuPreview = false;
             inv.setItem(sel, mainHand);
             inv.setItem(40, offHand);
         }
-        Ui.textC(Ui.fit(t.name, w - 8), x + w / 2, y + h - 13, Ui.dim());
+        Ui.textC(Ui.fit(t.name, w - 8), x + w / 2, y + h - 24, 0xFFFFFFFF);
+        Ui.textC("In your hand now", x + w / 2, y + h - 13, Ui.dim());
     }
 
     // ---------------------------------------------------------------- build the mix pack
@@ -735,7 +818,8 @@ final class PacksPanel {
         }
     }
 
+    /** Closing the menu never uses previewed choices - only "Apply changes" does. */
     void closed() {
-        if (dirty) apply();
+        if (dirty && PENDING.isEmpty()) apply();
     }
 }

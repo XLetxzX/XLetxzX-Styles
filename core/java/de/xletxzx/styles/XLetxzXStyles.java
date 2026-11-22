@@ -72,6 +72,7 @@ public class XLetxzXStyles implements ClientModInitializer {
         Config.get();
         Tweaks.markApplied();
         PackManager.install();
+        PacksPanel.rescanPacks();   // find every resource pack right at game start (in the background)
         DiscordRpc.setEnabled(Config.get().fx.discord);
 
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hit) -> {
@@ -90,6 +91,8 @@ public class XLetxzXStyles implements ClientModInitializer {
         ChatMove.register();
         net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.BEFORE_BLOCK_OUTLINE
             .register((ctx, state) -> BlockHighlight.render(ctx, state));
+        net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.AFTER_ENTITIES
+            .register(ctx -> { try { PopChams.render(ctx); } catch (Throwable ignored) {} });
     }
 
     private static void tick(Minecraft mc) {
@@ -154,8 +157,8 @@ public class XLetxzXStyles implements ClientModInitializer {
 
     // ---------------------------------------------------------------- zoom
     private static void zoom(Minecraft mc, long w, Config c) {
-        boolean z = c.fx.zoom && c.fx.zoomKey > 0 && mc.screen == null
-            && GLFW.glfwGetKey(w, c.fx.zoomKey) == GLFW.GLFW_PRESS;
+        // the key itself is a normal Minecraft key binding (Controls > Key Binds > XLetxzX Styles)
+        boolean z = c.fx.zoom && mc.screen == null && Bridge.zoomDown;
         if (z && !zooming) { savedFov = mc.options.fov().get(); zooming = true; }
         if (z) mc.options.fov().set(Math.max(30, Math.min(110, c.fx.zoomFov)));
         if (!z && zooming) { mc.options.fov().set(savedFov); zooming = false; }
@@ -214,6 +217,27 @@ public class XLetxzXStyles implements ClientModInitializer {
 
     private static boolean startDone;
 
+    /**
+     * Max FPS: strongest settings without touching render / simulation distance. Also switches off the effects
+     * of this mod that cost the most (full screen motion blur / saturation shader, glow outlines).
+     */
+    static void applyMaxFps(Minecraft mc) {
+        Config c = Config.get();
+        Config.Perf p = c.perf;
+        p.keepDistances = true;
+        p.vsyncOff = true; p.unlimitedFps = true; p.shadowsOff = true;
+        p.particlesMin = true; p.cloudsOff = true; p.aoOff = true; p.fastLeaves = true;
+        p.noImprovedTrans = true; p.noFade = true; p.noMenuBlur = true;
+        p.biomeBlend = 0; p.mipmap = 0; p.weather = 3;
+        p.entityDistance = Math.min(p.entityDistance, 75);
+        p.noAnim = true;
+        p.cullEntities = true; p.cullDist = Math.max(48, Math.min(p.cullDist, 64));
+        c.post.blurOn = false; c.post.satOn = false;
+        c.glow.outline = false;
+        Config.save();
+        applyFpsBoost(mc);
+    }
+
     static void applyFpsBoost(Minecraft mc) {
         Config.Perf p = Config.get().perf;
         if (p.particlesMin) mc.options.particles().set(net.minecraft.server.level.ParticleStatus.MINIMAL);
@@ -225,8 +249,10 @@ public class XLetxzXStyles implements ClientModInitializer {
         if (p.noMenuBlur) mc.options.menuBackgroundBlurriness().set(0);
         mc.options.mipmapLevels().set(p.mipmap);
         mc.options.weatherRadius().set(p.weather);
-        mc.options.renderDistance().set(p.renderDistance);
-        mc.options.simulationDistance().set(p.simDistance);
+        if (!p.keepDistances) {
+            mc.options.renderDistance().set(p.renderDistance);
+            mc.options.simulationDistance().set(p.simDistance);
+        }
         if (p.vsyncOff) mc.options.enableVsync().set(false);
         if (p.unlimitedFps) mc.options.framerateLimit().set(260);
         mc.options.entityShadows().set(!p.shadowsOff);

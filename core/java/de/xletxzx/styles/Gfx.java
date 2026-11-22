@@ -24,7 +24,9 @@ final class Gfx {
     });
     private static final Set<String> requested = ConcurrentHashMap.newKeySet();
     private static final Map<String, Object[]> ready = new ConcurrentHashMap<>();
-    private static Method mHas, mLoad, mDraw, mCube, mCrystal;
+    private static Method mHas, mLoad, mDraw, mCube, mCrystal, mScene;
+    static final String V_OBSIDIAN = "textures/block/obsidian.png";
+    static final String V_CRYSTAL = "textures/entity/end_crystal/end_crystal.png";
     private static boolean broken;
 
     private Gfx() {}
@@ -39,8 +41,9 @@ final class Gfx {
                     case "has": mHas = m; break;
                     case "load": mLoad = m; break;
                     case "draw": mDraw = m; break;
-                    case "cube": mCube = m; break;
+                    case "cube": if (m.getParameterCount() == 8) mCube = m; break;   // the version with the top colour
                     case "crystal": mCrystal = m; break;
+                    case "crystalScene": mScene = m; break;
                     default: break;
                 }
             }
@@ -88,10 +91,60 @@ final class Gfx {
         try { return (Boolean) mDraw.invoke(null, g, key(pack, path), x, y, w, h); } catch (Throwable t) { return false; }
     }
 
-    static boolean cube(GuiGraphics g, String pack, String top, String side, int cx, int cy, int size) {
+    /** Block with the vanilla textures (ignores resource packs), drawn like the pack blocks. */
+    static boolean cubeVanilla(GuiGraphics g, String top, String side, int cx, int cy, int size, int topTint) {
+        boolean a = ensureVanilla(top), b = ensureVanilla(side);
+        if (!a || !b || mCube == null) return false;
+        try { return (Boolean) mCube.invoke(null, g, key("vanilla", top), key("vanilla", side), cx, cy, size, topTint); } catch (Throwable t) { return false; }
+    }
+
+    /** topTint = colour multiplied onto the top face (0xFFFFFFFF = none), e.g. green for grass. */
+    static boolean cube(GuiGraphics g, String pack, String top, String side, int cx, int cy, int size, int topTint) {
         boolean a = ensure(pack, top), b = ensure(pack, side);
         if (!a || !b) return false;
-        try { return (Boolean) mCube.invoke(null, g, key(pack, top), key(pack, side), cx, cy, size); } catch (Throwable t) { return false; }
+        try { return (Boolean) mCube.invoke(null, g, key(pack, top), key(pack, side), cx, cy, size, topTint); } catch (Throwable t) { return false; }
+    }
+
+    /** Like ensure(), but reads the file from vanilla Minecraft (ignores resource packs). */
+    static boolean ensureVanilla(String path) {
+        if (!init()) return false;
+        String key = key("vanilla", path);
+        try {
+            if ((Boolean) mHas.invoke(null, key)) return true;
+            Object[] r = ready.remove(key);
+            if (r != null) {
+                mLoad.invoke(null, key, r[0], r[1]);
+                return true;
+            }
+        } catch (Throwable t) {
+            return false;
+        }
+        if (requested.add(key)) {
+            IO.submit(() -> {
+                byte[] png = null;
+                try {
+                    var res = Tweaks.vanilla(net.minecraft.client.Minecraft.getInstance().getResourceManager(), path);
+                    if (res != null) try (java.io.InputStream in = res.open()) { png = in.readAllBytes(); }
+                } catch (Throwable ignored) {}
+                ready.put(key, new Object[]{png, 1});
+            });
+        }
+        return false;
+    }
+
+    /**
+     * Normal obsidian block with an end crystal floating and turning above it. The crystal uses the pack's
+     * entity skin when the pack has one (entPath), otherwise the vanilla crystal.
+     */
+    static boolean crystalScene(GuiGraphics g, String pack, String entPath, int cx, int cy, int size) {
+        if (!init() || mScene == null) return false;
+        String ck;
+        boolean ok;
+        if (pack != null && entPath != null) { ok = ensure(pack, entPath); ck = key(pack, entPath); }
+        else { ok = ensureVanilla(V_CRYSTAL); ck = key("vanilla", V_CRYSTAL); }
+        boolean ob = ensureVanilla(V_OBSIDIAN);
+        if (!ok || !ob) return false;
+        try { return (Boolean) mScene.invoke(null, g, ck, key("vanilla", V_OBSIDIAN), cx, cy, size); } catch (Throwable t) { return false; }
     }
 
     static boolean crystal(GuiGraphics g, String pack, String path, int cx, int cy, int size) {

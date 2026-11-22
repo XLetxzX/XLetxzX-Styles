@@ -38,6 +38,24 @@ public final class Bridge {
 
     public static void setMenuKey(int key) { menuKey = key; }
 
+    /** True while the menu draws your skin preview: then fire, name tags, arrows ... are left out. */
+    public static volatile boolean menuPreview;
+
+    public static void setMenuPreview(boolean on) { menuPreview = on; }
+
+    /** Zoom key state from the Minecraft key binding (set by the menu every tick). */
+    public static volatile boolean zoomDown;
+    /** Display name of the zoom key binding, e.g. "C" or "Mouse Button 4". */
+    public static volatile String zoomKeyName = "";
+
+    public static void setZoomState(boolean down, String name) {
+        zoomDown = down;
+        zoomKeyName = name == null ? "" : name;
+    }
+
+    /** Zoom key from older configs (only used once to move it into the Minecraft key binding). */
+    public static int zoomKey() { return Config.get().fx.zoomKey; }
+
     public static void renderExtras(Object g, int x, int y, int w, int h, int mx, int my, int accent) {
         theme(accent);
         GuiGraphics gg = (GuiGraphics) g;
@@ -132,6 +150,13 @@ public final class Bridge {
     }
 
     public static int mixChanged() { return Config.get().mix.size(); }
+
+    /** Rebuilds the generated pack from the saved texture choices and reloads (Home > Apply textures). */
+    public static void applyTextures() {
+        PacksPanel.syncMix();
+        PacksPanel.dirty = false;
+        Tweaks.rebuild(true);
+    }
 
     public static void renderPresets(Object g, int x, int y, int w, int h, int mx, int my, int accent) {
         theme(accent);

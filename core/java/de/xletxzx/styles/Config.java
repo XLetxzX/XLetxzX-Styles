@@ -190,6 +190,11 @@ public class Config {
         public int handScale = 70;
         public boolean sizeThird = true;
         public Map<String, Integer> itemSizes = new LinkedHashMap<>();   // item id -> size in percent
+        // totem pop chams
+        public boolean popChams = false, popSelf = false, popRise = true;
+        public int popColor = 0xFFB07CFF;
+        public int popOpacity = 55;   // percent
+        public int popTime = 20;      // tenths of a second
     }
 
     /** Glow outline on chosen dropped items. */
@@ -217,6 +222,8 @@ public class Config {
         public int mipmap = 0, weather = 3;
         public boolean cullEntities = false, noAnim = false;
         public int cullDist = 64;
+        /** The boost never changes your render / simulation distance. */
+        public boolean keepDistances = true;
     }
 
     public int accent = 0xFF8B3DFF;
@@ -259,6 +266,10 @@ public class Config {
     public Post post = new Post();
     public int hudVer = 0;
     public boolean packMerged = false;
+    /** Also use packs from other Minecraft folders / launcher profiles on this PC (read only). */
+    public boolean packsEverywhere = true;
+    /** TxT: apply a new texture choice right away (it shows in your hand without clicking Apply). */
+    public boolean liveTextures = true;
     public String editPack = "";
     public List<String> installedPacks = new ArrayList<>();
     /** Texture mixer: tile id -> pack file name. */

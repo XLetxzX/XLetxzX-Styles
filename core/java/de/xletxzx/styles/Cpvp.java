@@ -72,6 +72,7 @@ public final class Cpvp {
     /** True when this sound should not be played. */
     public static boolean blockSound(String id, double x, double y, double z) {
         Config.Cpvp c = Config.get().cpvp;
+        try { PopChams.onSound(id, x, y, z); } catch (Throwable ignored) {}
         if (c.noTotemSnd && id.endsWith("item.totem.use")) return true;
         if (id.endsWith("entity.generic.explode")) {
             if (c.noExpl) return true;

@@ -270,23 +270,17 @@ final class ExtrasPanel {
         return false;
     }
 
-    /** Key binding button. which: 1 = zoom key, 2 = menu key. */
+    /**
+     * Key binding button. The keys are normal Minecraft key bindings, so the button opens
+     * Options > Controls > Key Binds (category "XLetxzX Styles").
+     */
     private void keyButton(int which, int x, int y, int w) {
-        Config.Fx f = Config.get().fx;
-        int cur = f.zoomKey;
-        boolean on = rebinding == which;
-        if (Ui.button(on ? "Press a key..." : keyName(cur), x, y, w, 16, on)) rebinding = on ? 0 : which;
-        if (rebinding != which) return;
-        long win = GLFW.glfwGetCurrentContext();
-        for (int k = 32; k <= 348 && win != 0; k++) {
-            if (GLFW.glfwGetKey(win, k) == GLFW.GLFW_PRESS) {
-                if (k != GLFW.GLFW_KEY_ESCAPE) {
-                    f.zoomKey = k;
-                }
-                rebinding = 0;
-                Config.save();
-                break;
-            }
+        String name = Bridge.zoomKeyName;
+        if (name == null || name.isEmpty()) name = keyName(Config.get().fx.zoomKey);
+        if (Ui.button(name + "  - change", x, y, w, 16, false)) {
+            Minecraft mc = Minecraft.getInstance();
+            net.minecraft.client.gui.screens.Screen back = mc.screen;
+            mc.execute(() -> mc.setScreen(new net.minecraft.client.gui.screens.options.controls.KeyBindsScreen(back, mc.options)));
         }
     }
 
@@ -343,10 +337,11 @@ final class ExtrasPanel {
 
     private int section(String s, int x, int y, int w) {
         int o = emoji(s, x, y + 3);
-        Ui.text(Tr.t(s).toUpperCase(), x + o, y + (o > 0 ? 3 : 0), Ui.muted());
-        int tw = o + Ui.w(s);
-        Ui.fill(x + tw + 6, y + (o > 0 ? 7 : 4), Math.max(0, w - tw - 6), 1, Ui.alpha(Ui.muted(), 70));
-        return y + (o > 0 ? 20 : 14);
+        // calm section title: small accent dot, label, faint line
+        Ui.text(Tr.t(s).toUpperCase(), x + o, y + (o > 0 ? 3 : 0), Ui.alpha(Ui.muted(), 230));
+        int tw = o + Ui.w(Tr.t(s).toUpperCase());
+        Ui.fill(x + tw + 8, y + (o > 0 ? 7 : 4), Math.max(0, w - tw - 8), 1, Ui.alpha(Ui.muted(), 40));
+        return y + (o > 0 ? 22 : 16);
     }
 
     private int sl(String id, String label, String vt, int x, int y, int w, int v, int min, int max) {
@@ -396,10 +391,8 @@ final class ExtrasPanel {
         Config c = Config.get();
         Ui.text("HUD Modules", x, y, Ui.text());
         Ui.textR(HudRenderer.KEYS.length + " modules", x + w, y, Ui.muted());
-        int by = y + 14, bw = (w - 8) / 3;
-        if (Ui.button("HUD Editor", x, by, bw, 16, true)) after = () -> minecraft.setScreen(new HudEditorScreen(minecraft.screen));
-        if (Ui.button("All on", x + bw + 4, by, bw, 16, false)) Config.setAll(true);
-        if (Ui.button("All off", x + 2 * (bw + 4), by, bw, 16, false)) Config.setAll(false);
+        int by = y + 14;
+        if (Ui.button("HUD Editor", x, by, w, 16, true)) after = () -> minecraft.setScreen(new HudEditorScreen(minecraft.screen));
 
         int top = by + 22, lh = y + h - top;
         int lw = w / 2 - 14;
@@ -686,7 +679,7 @@ final class ExtrasPanel {
     // ================================================================ SEARCH
     private static final String[][] ITEMS = {
         {"Zoom", "2", "Features"}, {"Kill animation", "2", "Features"}, {"Spotify", "2", "Features"}, {"Lyrics", "2", "Features"},
-        {"Opacity Editor", "18", "Extras"}, {"Low Fire", "3", "Tweaks"}, {"Low Shield", "3", "Tweaks"}, {"Low Totem", "3", "Tweaks"}, {"Low Totem Pop", "17", "CPvP"},
+        {"Opacity Editor", "18", "Extras"}, {"Low Fire", "3", "Tweaks"}, {"Low Shield", "3", "Tweaks"}, {"Low Totem", "3", "Tweaks"}, {"Low Totem Pop", "17", "CPvP"}, {"Totem Pop Chams", "17", "CPvP"},
         {"No Pumpkin overlay", "3", "Tweaks"}, {"No Vignette", "3", "Tweaks"}, {"Hide my armor", "3", "Tweaks"},
         {"Render distance", "4", "Performance"}, {"Simulation distance", "4", "Performance"}, {"VSync", "4", "Performance"}, {"Unlimited FPS", "4", "Performance"},
         {"Shadows", "4", "Performance"}, {"Particles", "4", "Performance"}, {"Clouds", "4", "Performance"}, {"Cull entities", "4", "Performance"}, {"Engine boost", "4", "Performance"},
@@ -902,7 +895,7 @@ final class ExtrasPanel {
     // ================================================================ CPVP
     private int cpvpOn() {
         Config.Cpvp p = Config.get().cpvp; Config.Tweaks t = Config.get().tweaks;
-        return (t.lowTotemPop ? 1 : 0) + (t.smallShield ? 1 : 0) + (p.noCrystalExpl ? 1 : 0) + (p.noTotemSnd ? 1 : 0) + (p.noCrystalSnd ? 1 : 0) + (p.noExpl ? 1 : 0) + (p.smallHand ? 1 : 0) + (p.noBreakParticles ? 1 : 0) + (p.itemSizes.containsKey("totem_of_undying") ? 1 : 0);
+        return (t.lowTotemPop ? 1 : 0) + (t.smallShield ? 1 : 0) + (p.noCrystalExpl ? 1 : 0) + (p.noTotemSnd ? 1 : 0) + (p.noCrystalSnd ? 1 : 0) + (p.noExpl ? 1 : 0) + (p.smallHand ? 1 : 0) + (p.noBreakParticles ? 1 : 0) + (p.itemSizes.containsKey("totem_of_undying") ? 1 : 0) + (p.popChams ? 1 : 0);
     }
 
     private int cpvpTab(int x, int y, int w) {
@@ -938,6 +931,14 @@ final class ExtrasPanel {
         p.noCrystalExpl = togD("No crystal explosion", "Hides the crystal explosion effect.", x, y, w, p.noCrystalExpl); y += 30;
         p.noExpl = togD("No explosions", "Hides all explosion particles.", x, y, w, p.noExpl); y += 30;
         p.noBreakParticles = togD("No block break particles", "Breaking a block shows no particles.", x, y, w, p.noBreakParticles); y += 30;
+        p.popChams = togD("Totem pop chams", "A coloured ghost of the player stays where they popped a totem.", x, y, w, p.popChams); y += 30;
+        if (p.popChams) {
+            p.popOpacity = sl("pco", "  Opacity", p.popOpacity + " %", x, y, w, p.popOpacity, 10, 100); y += 28;
+            p.popTime = sl("pct", "  Duration", String.format("%.1f s", p.popTime / 10f), x, y, w, p.popTime, 5, 50); y += 28;
+            p.popRise = togD("  Float up", "The ghost slowly rises while it fades.", x, y, w, p.popRise); y += 30;
+            p.popSelf = togD("  Also my own pops", "Shows a ghost for your own totem pops too.", x, y, w, p.popSelf); y += 30;
+            if (fold("pcc", "  Colour", x, y, w, p.popColor)) { y += 22; p.popColor = Ui.colorEditor("pcce", x, y, w, p.popColor); y += 132; } else y += 24;
+        }
         y = section("Sounds", x, y, w);
         p.noTotemSnd = togD("No totem sounds", "Mutes the totem pop sound.", x, y, w, p.noTotemSnd); y += 30;
         p.noCrystalSnd = togD("No crystal sounds", "Mutes crystal placing and explosion sounds.", x, y, w, p.noCrystalSnd); y += 30;
@@ -1238,8 +1239,15 @@ final class ExtrasPanel {
         Ui.text("Performance - FPS Boost", x, y, Ui.text());
         Ui.textR(minecraft.getFps() + " FPS", x + w, y, Ui.muted());
         y += 18;
-        if (Ui.button("Apply FPS Boost", x, y, w, 22, true)) after = () -> { XLetxzXStyles.applyFpsBoost(minecraft); toast("FPS Boost applied."); };
-        y += 32;
+        int hw = (w - 6) / 2;
+        if (Ui.button("MAX FPS", x, y, hw, 22, true)) after = () -> {
+            XLetxzXStyles.applyMaxFps(minecraft);
+            toast("Max FPS on - distances kept, motion blur and glow outline off.");
+        };
+        if (Ui.button("Apply settings below", x + hw + 6, y, w - hw - 6, 22, false)) after = () -> { XLetxzXStyles.applyFpsBoost(minecraft); toast("FPS Boost applied."); };
+        y += 26;
+        Ui.text("Max FPS keeps your render and simulation distance.", x, y, Ui.muted());
+        y += 18;
 
         y = section("Presets", x, y, w);
         int pw = (w - 8) / 3;
@@ -1249,8 +1257,11 @@ final class ExtrasPanel {
         y += 26;
 
         y = section("Boost settings", x, y, w);
-        p.renderDistance = sl("rd", "Render distance", p.renderDistance + " chunks", x, y, w, p.renderDistance, 2, 32); y += 26;
-        p.simDistance = sl("sim", "Simulation distance", p.simDistance + " chunks", x, y, w, p.simDistance, 5, 32); y += 26;
+        p.keepDistances = tog("Keep my render and simulation distance", x, y, w, p.keepDistances); y += 22;
+        if (!p.keepDistances) {
+            p.renderDistance = sl("rd", "Render distance", p.renderDistance + " chunks", x, y, w, p.renderDistance, 2, 32); y += 26;
+            p.simDistance = sl("sim", "Simulation distance", p.simDistance + " chunks", x, y, w, p.simDistance, 5, 32); y += 26;
+        }
         p.entityDistance = sl("ed", "Entity distance", p.entityDistance + "%", x, y, w, p.entityDistance, 50, 200); y += 26;
         p.biomeBlend = sl("bb", "Biome blend", String.valueOf(p.biomeBlend), x, y, w, p.biomeBlend, 0, 7); y += 26;
         p.mipmap = sl("mm", "Mipmap levels", String.valueOf(p.mipmap), x, y, w, p.mipmap, 0, 4); y += 26;

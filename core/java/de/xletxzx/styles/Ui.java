@@ -164,40 +164,46 @@ final class Ui {
         fill(x + w - 1, y + 1, 1, h - 2, col);
     }
 
-    /** Panel / tile with gradient, border, highlight line and an accent glow on hover or selection. */
+    /** Rounded box with a 1 px outline (outline colour 0 = no outline). */
+    static void outlined(int x, int y, int w, int h, int r, int fillCol, int outline) {
+        if ((outline >>> 24) != 0) {
+            rrect(x, y, w, h, r, outline);
+            rrect(x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), fillCol);
+        } else {
+            rrect(x, y, w, h, r, fillCol);
+        }
+    }
+
+    /** Flat panel / tile: one calm surface, outline only on hover or selection. */
     static void card(int x, int y, int w, int h, boolean hover, boolean selected) {
-        if (selected || hover) border(x - 1, y - 1, w + 2, h + 2, alpha(accent(), selected ? 90 : 45));
-        int top = hover ? mix(surface2(), accent(), 0.10f) : surface2();
-        grad(x, y, w, h, alpha(top, Math.min(240, c().bgAlpha + 30)), alpha(surface(), Math.min(240, c().bgAlpha + 30)));
-        border(x, y, w, h, selected ? accent() : hover ? mix(line(), accent(), 0.55f) : line());
-        fill(x + 1, y + 1, w - 2, 1, 0x18FFFFFF);
+        int a = Math.min(235, c().bgAlpha + 30);
+        int base = alpha(hover ? mix(surface2(), 0xFFFFFFFF, 0.05f) : surface2(), a);
+        int outline = selected ? accent() : hover ? alpha(mix(line(), accent(), 0.5f), 255) : alpha(line(), 120);
+        outlined(x, y, w, h, 3, base, outline);
     }
 
     static boolean button(String label, int x, int y, int w, int h, boolean selected) {
         boolean hv = hover(x, y, w, h);
         if (selected) {
-            int a = hv ? mix(accent(), 0xFFFFFFFF, 0.12f) : accent();
-            grad(x, y, w, h, a, mix(a, 0xFF000000, 0.30f));
-            border(x, y, w, h, mix(a, 0xFFFFFFFF, 0.25f));
-            fill(x + 1, y + 1, w - 2, 1, 0x30FFFFFF);
+            rrect(x, y, w, h, 3, hv ? mix(accent(), 0xFFFFFFFF, 0.10f) : accent());
         } else {
             card(x, y, w, h, hv, false);
         }
-        textC(label, x + w / 2, y + (h - 8) / 2, 0xFFFFFFFF);
+        textC(label, x + w / 2, y + (h - 8) / 2, selected || hv ? 0xFFFFFFFF : 0xFFE2E3EE);
         if (hv && pressed) { pressed = false; return true; }
         return false;
     }
 
-    /** Gibt true zurueck, wenn angeklickt (Aufrufer dreht den Wert um). */
+    /** Pill switch. Returns true when clicked (the caller flips the value). */
     static boolean toggle(int x, int y, boolean on) {
-        int w = 26, h = 13;
+        int w = 24, h = 12;
         boolean hv = hover(x, y, w, h);
-        if (on) grad(x, y, w, h, mix(accent(), 0xFFFFFFFF, hv ? 0.15f : 0f), mix(accent(), 0xFF000000, 0.25f));
-        else grad(x, y, w, h, mix(surface2(), 0xFFFFFFFF, hv ? 0.10f : 0.04f), surface());
-        border(x, y, w, h, on ? mix(accent(), 0xFFFFFFFF, 0.25f) : line());
-        int kx = on ? x + w - h + 2 : x + 2;
-        fill(kx, y + 3, h - 4, h - 4, 0x55000000);
-        fill(kx, y + 2, h - 4, h - 4, 0xFFFFFFFF);
+        int track = on ? (hv ? mix(accent(), 0xFFFFFFFF, 0.10f) : accent())
+                       : (hv ? mix(surface2(), 0xFFFFFFFF, 0.10f) : mix(surface2(), 0xFFFFFFFF, 0.04f));
+        rrect(x, y, w, h, h / 2, track);
+        int k = h - 4;
+        int kx = on ? x + w - k - 2 : x + 2;
+        rrect(kx, y + 2, k, k, k / 2, on ? 0xFFFFFFFF : 0xFFB8BACB);
         if (hv && pressed) { pressed = false; return true; }
         return false;
     }
@@ -205,15 +211,14 @@ final class Ui {
     static int slider(String id, String label, String valueText, int x, int y, int w, int v, int min, int max) {
         text(label, x, y, text());
         textR(valueText, x + w, y, muted());
-        int ty = y + 13;
-        fill(x, ty, w, 5, surface());
-        border(x, ty, w, 5, line());
+        int ty = y + 14;
+        rrect(x, ty, w, 3, 1, mix(surface2(), 0xFFFFFFFF, 0.06f));
         float f = (v - min) / (float) (max - min);
         f = Math.max(0f, Math.min(1f, f));
         int fw = Math.max(3, (int) (w * f));
-        grad(x, ty, fw, 5, mix(accent(), 0xFFFFFFFF, 0.2f), accent());
-        fill(x + fw - 3, ty - 2, 6, 9, 0xFFFFFFFF);
-        border(x + fw - 3, ty - 2, 6, 9, accent());
+        rrect(x, ty, fw, 3, 1, accent());
+        boolean hk = id.equals(active) || hover(x + fw - 5, ty - 4, 10, 11);
+        rrect(x + fw - 4, ty - 3, 8, 9, 4, hk ? 0xFFFFFFFF : 0xFFE6E7F0);
         if (pressed && hover(x - 3, ty - 4, w + 6, 13)) { active = id; pressed = false; }
         if (id.equals(active) && down) {
             float nf = (mx - x) / (float) w;
