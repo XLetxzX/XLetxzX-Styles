@@ -1,1 +1,5 @@
-{ "key.xletxzx.open": "Open XLetxzX Menu" }
+{
+  "key.category.xletxzx.main": "XLetxzX Styles",
+  "key.xletxzx.open": "Open menu",
+  "key.xletxzx.zoom": "Zoom"
+}
