@@ -17,6 +17,8 @@ public class Config {
     public int bgIndex = 0;
     public boolean mode3d = false;
     public int winScale = 100;   // window size in percent
+    public boolean tourAuto = true;  // show the tour automatically until it was finished or skipped
+    public boolean tourDone = false;
 
     private static Config instance = new Config();
 

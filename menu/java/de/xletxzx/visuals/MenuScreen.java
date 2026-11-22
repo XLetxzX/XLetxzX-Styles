@@ -40,6 +40,19 @@ public class MenuScreen extends Screen {
     private static final int[] TAB_PAGES = {0, 9, 1};
     private static final int HOME = 0, EXTRAS = 1, DESIGN = 2, CREDITS = 3, IMPORT = 4, SETTINGS = 5,
             MODLIST = 6, CHANGELOG = 7, PRESETS = 8, PACKS = 9;
+
+    // ---- tour (tutorial). Targets: 0 = centre panel, 1 = tabs, 2 = TxT tab, 3 = EXTRAS tab, 4 = look icon, 5 = settings icon
+    private static final String[][] TOUR = {
+        {"Welcome to XLetxzX Styles", "This short tour shows you around. You can skip it at any time."},
+        {"Tabs", "HOME, TxT and EXTRAS at the top are the main pages of the mod."},
+        {"TxT textures", "Pick the texture of every PvP item from any of your resource packs. Click Apply when you're done."},
+        {"Extras", "HUD modules, Spotify HUD and lyrics, zoom, totem pop chams and lots of small tweaks."},
+        {"Look & backgrounds", "Themes, colours, fonts and animated backgrounds for this menu."},
+        {"Settings and keys", "Language, Discord status and the tour itself. The menu and zoom keys are in Minecraft: Options > Controls > Key Binds > XLetxzX Styles."}
+    };
+    private static final int[] TOUR_TARGET = {0, 1, 2, 3, 4, 5};
+    private int tourStep = -1;
+    private boolean tourOffered;
     private String[] presetNames = new String[0], presetInfo = new String[0];
 
     private static final String[] LOOK_NAMES = {"Modern", "Minecraft", "Classic", "Glass", "Flat"};
@@ -100,6 +113,7 @@ public class MenuScreen extends Screen {
         int x, y, w, h, kind, look;
         String label;
         boolean selected;
+        net.minecraft.item.ItemStack icon;
     }
 
     private static final java.util.Set<String> startupMods = new java.util.HashSet<>();
@@ -288,7 +302,8 @@ public class MenuScreen extends Screen {
         Btn b = new Btn();
         b.kind = kind; b.x = x; b.y = y; b.w = w; b.h = h; b.label = label; b.selected = sel;
         btns.add(b);
-        addDrawableChild(ButtonWidget.builder(Text.empty(), btn -> r.run()).dimensions(x + OX, y + OY, w, h).build());
+        // during the tour only the tour bubble can be clicked
+        if (tourStep < 0) addDrawableChild(ButtonWidget.builder(Text.empty(), btn -> r.run()).dimensions(x + OX, y + OY, w, h).build());
         return b;
     }
 
@@ -299,6 +314,105 @@ public class MenuScreen extends Screen {
         c.bgIndex = THEME_VALS[i][1];
         Config.save();
         clearAndInit();
+    }
+
+
+    private void startTour() {
+        page = HOME;
+        tourStep = 0;
+        tourOffered = true;
+        clearAndInit();
+    }
+
+    /** Ends the tour (finished or skipped); it will not open by itself again. */
+    private void endTour() {
+        tourStep = -1;
+        Config.get().tourDone = true;
+        Config.save();
+        clearAndInit();
+    }
+
+    private int tabX0() { return Math.max(118, (W - (TABS.length * 60 + (TABS.length - 1) * 4)) / 2); }
+
+    /** Area of the start page the current tour step points at (window coordinates). */
+    private int[] tourRect() {
+        int t = TOUR_TARGET[Math.max(0, Math.min(TOUR_TARGET.length - 1, tourStep))];
+        int tx0 = tabX0();
+        switch (t) {
+            case 1: return new int[]{tx0 - 2, 3, TABS.length * 64, 22};
+            case 2: return new int[]{tx0 + 64 - 2, 3, 64, 22};
+            case 3: return new int[]{tx0 + 128 - 2, 3, 64, 22};
+            case 4: return new int[]{W - 78, 3, 24, 22};
+            case 5: return new int[]{W - 30, 3, 24, 22};
+            default: {
+                int img = (W - 176) / 3;
+                int cx = (20 + img + 20 + W - 176 - 10) / 2;
+                int gy = H < 300 ? 25 : 28;
+                int by = Math.max(80, H / 2 - 10 - (H < 300 ? 28 : 0));
+                return new int[]{cx - 117, by - 64, 234, gy * 2 + 22 + 62 + 36};
+            }
+        }
+    }
+
+    private boolean inRect(int mx, int my, int x, int y, int w, int h) {
+        return mx >= x && mx < x + w && my >= y && my < y + h;
+    }
+
+    /** Tour overlay: dims everything except the highlighted area and shows a text bubble. */
+    private void drawTour(DrawContext ctx, int mx, int my, boolean click, int acc) {
+        int[] r = tourRect();
+        int dim = 0xB0000000;
+        ctx.fill(0, 0, W, r[1], dim);
+        ctx.fill(0, r[1] + r[3], W, H, dim);
+        ctx.fill(0, r[1], r[0], r[1] + r[3], dim);
+        ctx.fill(r[0] + r[2], r[1], W, r[1] + r[3], dim);
+        frame(ctx, r[0] - 1, r[1] - 1, r[2] + 2, r[3] + 2, acc);
+        frame(ctx, r[0] - 2, r[1] - 2, r[2] + 4, r[3] + 4, (acc & 0x00FFFFFF) | 0x66000000);
+
+        String[] step = TOUR[tourStep];
+        int bw = Math.min(230, W - 40);
+        List<net.minecraft.text.OrderedText> lines = textRenderer.wrapLines(lit(step[1]), bw - 20);
+        int bh = 52 + lines.size() * 10 + 22;
+        int bx, by;
+        if (r[0] + r[2] + 14 + bw <= W - 8) {          // right of the highlight
+            bx = r[0] + r[2] + 14;
+            by = Math.max(36, Math.min(H - 30 - bh, r[1] + Math.min(r[3], 40) / 2 - 20));
+        } else {                                          // centred on the window
+            bx = (W - bw) / 2;
+            by = Math.max(36, (H - bh) / 2);
+        }
+        ctx.fill(bx + 2, by + 3, bx + bw + 2, by + bh + 3, 0x66000000);
+        box(ctx, bx, by, bw, bh, acc, 0xF2141722, true);
+        ctx.fill(bx + 1, by + 1, bx + bw - 1, by + 3, acc);
+        ctx.drawText(textRenderer, lit("Tour  ·  " + (tourStep + 1) + " / " + TOUR.length), bx + 10, by + 9, acc, false);
+        ctx.drawText(textRenderer, lit(step[0]), bx + 10, by + 22, 0xFFFFFFFF, true);
+        int ty = by + 36;
+        for (net.minecraft.text.OrderedText l : lines) { ctx.drawText(textRenderer, l, bx + 10, ty, 0xFFC8CAD8, false); ty += 10; }
+
+        // buttons
+        boolean last = tourStep == TOUR.length - 1;
+        String next = last ? "Done" : "Next";
+        int nw = Math.max(44, tw(next) + 16), by2 = by + bh - 24;
+        int nx = bx + 10;
+        boolean hn = inRect(mx, my, nx, by2, nw, 16);
+        box(ctx, nx, by2, nw, 16, acc, hn ? (acc | 0xFF303030) : acc, true);
+        ctx.drawText(textRenderer, lit(next), nx + (nw - tw(next)) / 2, by2 + 4, 0xFFFFFFFF, true);
+        int px = nx + nw + 6, pw2 = Math.max(40, tw("Back") + 14);
+        boolean hb = tourStep > 0 && inRect(mx, my, px, by2, pw2, 16);
+        if (tourStep > 0) {
+            box(ctx, px, by2, pw2, 16, hb ? acc : 0xFF3B4056, hb ? 0xFF262A3C : 0xFF1C1F2E, true);
+            ctx.drawText(textRenderer, lit("Back"), px + (pw2 - tw("Back")) / 2, by2 + 4, 0xFFDDDDEE, false);
+        }
+        String skip = "Skip tour";
+        int sx = bx + bw - tw(skip) - 10;
+        boolean hs = inRect(mx, my, sx - 3, by2, tw(skip) + 6, 16);
+        ctx.drawText(textRenderer, lit(skip), sx, by2 + 4, hs ? 0xFFFFFFFF : 0xFF8F91A8, false);
+
+        if (click) {
+            if (hn) { if (last) endTour(); else tourStep++; }
+            else if (hb) tourStep--;
+            else if (hs) endTour();
+        }
     }
 
     private void openModsFolder() {
@@ -480,14 +594,20 @@ public class MenuScreen extends Screen {
         Config c = Config.get();
         int areaW = W - 40;
 
+        // the tour starts by itself the first time (until it was finished or skipped)
+        if (page == HOME && tourStep < 0 && !tourOffered && c.tourAuto && !c.tourDone) {
+            tourOffered = true;
+            tourStep = 0;
+        }
+
         // tabs
         int tabW = 60;
         for (int i = 0; i < TABS.length; i++) {
             final int idx = i;
-            int tx0 = Math.max(118, (W - (TABS.length * tabW + (TABS.length - 1) * 4)) / 2);
+            int tx0 = tabX0();
             add(5, tx0 + i * (tabW + 4), 5, tabW, 18, TABS[i], page == TAB_PAGES[i], () -> { page = TAB_PAGES[idx]; scroll = 0; clearAndInit(); });
         }
-        // import icon (top right)
+        // icons (top right)
         add(15, W - 124, 5, 20, 18, "Presets", page == PRESETS, () -> { page = PRESETS; clearAndInit(); });
         add(13, W - 100, 5, 20, 18, "Changelog", page == CHANGELOG, () -> { page = CHANGELOG; clearAndInit(); });
         add(14, W - 76, 5, 20, 18, "Look & backgrounds", page == DESIGN, () -> { page = DESIGN; clearAndInit(); });
@@ -505,19 +625,25 @@ public class MenuScreen extends Screen {
             add(1, bx, by, 190, bh, "Continue", false, this::close);
             add(0, bx, by + gy, 190, bh, "TxT textures", false, () -> { page = PACKS; clearAndInit(); });
             add(0, bx, by + gy * 2, 190, bh, "Credits", false, () -> { page = CREDITS; clearAndInit(); });
-            int tx = W - 168, ty = 44;
-            add(10, tx, ty, 78, 52, "Extras|" + Core.num("hudOn") + " HUD on", false, () -> { page = EXTRAS; clearAndInit(); });
-            add(10, tx + 82, ty, 78, 52, "TxT|" + Core.num("mixChanged") + " changed", false, () -> { page = PACKS; clearAndInit(); });
-            add(10, tx, ty + 56, 78, 52, "Settings|Performance", false, () -> { page = SETTINGS; clearAndInit(); });
-            add(10, tx + 82, ty + 56, 78, 52, "Look|Themes", false, () -> { page = DESIGN; clearAndInit(); });
-            add(10, tx, ty + 112, 160, 30, "Changelog", false, () -> { page = CHANGELOG; clearAndInit(); });
+            // tiles: 2 columns x 3 rows, all the same size, each with an item icon
+            int tx = W - 168, ty = 44, tw = 78, th = 40, tg = 4;
+            add(10, tx, ty, tw, th, "Extras|" + Core.num("hudOn") + " HUD on", false, () -> { page = EXTRAS; clearAndInit(); }).icon = new net.minecraft.item.ItemStack(net.minecraft.item.Items.NETHER_STAR);
+            add(10, tx + tw + tg, ty, tw, th, "TxT|" + Core.num("mixChanged") + " changed", false, () -> { page = PACKS; clearAndInit(); }).icon = new net.minecraft.item.ItemStack(net.minecraft.item.Items.END_CRYSTAL);
+            add(10, tx, ty + th + tg, tw, th, "Settings|FPS & keys", false, () -> { page = SETTINGS; clearAndInit(); }).icon = new net.minecraft.item.ItemStack(net.minecraft.item.Items.COMPARATOR);
+            add(10, tx + tw + tg, ty + th + tg, tw, th, "Look|Themes", false, () -> { page = DESIGN; clearAndInit(); }).icon = new net.minecraft.item.ItemStack(net.minecraft.item.Items.PAINTING);
+            add(10, tx, ty + 2 * (th + tg), tw, th, "Changelog|What's new", false, () -> { page = CHANGELOG; clearAndInit(); }).icon = new net.minecraft.item.ItemStack(net.minecraft.item.Items.WRITABLE_BOOK);
+            add(10, tx + tw + tg, ty + 2 * (th + tg), tw, th, "Tour|How it works", false, this::startTour).icon = new net.minecraft.item.ItemStack(net.minecraft.item.Items.COMPASS);
         } else if (page == DESIGN) {
             add(0, 20, 36, 60, 16, "< Back", false, () -> { page = HOME; clearAndInit(); });
         } else if (page == SETTINGS) {
             boolean dc = Core.bool("discord");
             int bw = 170;
             add(0, 20, 76, bw, 20, "Keybinds", false, this::openKeybinds);
-            add(0, 20, 100, bw, 20, "Look & backgrounds", false, () -> { page = DESIGN; clearAndInit(); });
+            add(2, 20, 100, bw, 20, "Tour at start: " + (c.tourAuto ? "ON" : "OFF"), c.tourAuto, () -> {
+                c.tourAuto = !c.tourAuto;
+                if (c.tourAuto) c.tourDone = false;   // switched on again: show it next time
+                Config.save(); clearAndInit();
+            });
             add(0, 20, 124, bw, 20, "Credits", false, () -> { page = CREDITS; clearAndInit(); });
             add(2, 20, 148, bw, 20, "3D mode: " + (c.mode3d ? "ON" : "OFF"), c.mode3d, () -> {
                 c.mode3d = !c.mode3d;
@@ -750,13 +876,10 @@ public class MenuScreen extends Screen {
             if (b.selected) ctx.fill(b.x, b.y + b.h - 2, b.x + b.w, b.y + b.h, acc);
         } else {
             if (d3) ctx.fill(b.x, b.y + 3, b.x + b.w, b.y + b.h + 3, 0xFF05050A);
-            if (b.kind != 4) ctx.fill(b.x + 1, b.y + 2, b.x + b.w + 1, b.y + b.h + 2, 0x44000000);
             if (b.kind == 0 && b.selected) border = acc;
-            if (b.kind == 1 && hov) ctx.fill(b.x - 1, b.y - 1, b.x + b.w + 1, b.y + b.h + 1, (acc & 0x00FFFFFF) | 0x55000000);
+            if (b.kind == 0 && !hov && !b.selected && look == 0) border = 0xFF2E3246;   // calm outline
             box(ctx, b.x, b.y, b.w, b.h, border, bg, round);
             if (look == 1 && b.kind == 0) ctx.fill(b.x + 1, b.y + 1, b.x + b.w - 1, b.y + 2, 0x55FFFFFF);
-            if (look == 4 && b.kind == 0 && hov) ctx.fill(b.x + 1, b.y + b.h - 2, b.x + b.w - 1, b.y + b.h - 1, acc);
-            if (b.kind == 1) ctx.fill(b.x + 2, b.y + 1, b.x + b.w - 2, b.y + 2, 0x55FFFFFF);
         }
         int tw = tw(b.label);
         int tx = b.x + (b.w - tw) / 2;
@@ -765,16 +888,30 @@ public class MenuScreen extends Screen {
             drawDiscordIcon(ctx, ix, b.y + (b.h - 15) / 2);
             tx = ix + 23;
         }
-        ctx.drawText(textRenderer, lit(b.label), tx, b.y + (b.h - 8) / 2, text, b.kind == 1);
+        ctx.drawText(textRenderer, lit(b.label), tx, b.y + (b.h - 8) / 2, text, false);
         b.y = origY;
     }
 
+    /** Cuts a text to a width and adds ".." when it is too long. */
+    private String fitText(String s, int maxW) {
+        String t = Core.tr(s);
+        if (textRenderer.getWidth(t) <= maxW) return t;
+        while (t.length() > 1 && textRenderer.getWidth(t + "..") > maxW) t = t.substring(0, t.length() - 1);
+        return t + "..";
+    }
+
+    /** Start page tile: icon top right, title and a short line below, accent strip on hover. */
     private void drawTile(DrawContext ctx, Btn b, boolean hov, int acc) {
-        ctx.fill(b.x + 1, b.y + 2, b.x + b.w + 1, b.y + b.h + 2, 0x44000000);
-        box(ctx, b.x, b.y, b.w, b.h, hov ? acc : 0xFF2B2F42, hov ? 0xFF1F2336 : 0xFF161926, true);
+        box(ctx, b.x, b.y, b.w, b.h, hov ? (acc & 0x00FFFFFF) | 0xCC000000 : 0xFF262A3B, hov ? 0xF01C2030 : 0xE6141722, true);
+        if (hov) ctx.fill(b.x + 1, b.y + 4, b.x + 3, b.y + b.h - 4, acc);
+        boolean icon = b.icon != null && !b.icon.isEmpty();
+        if (icon) ctx.drawItem(b.icon, b.x + b.w - 20, b.y + 5);
         String[] parts = b.label.split("\\|", 2);
-        ctx.drawText(textRenderer, lit(parts[0]), b.x + 8, b.y + 12, 0xFFFFFFFF, false);
-        if (parts.length > 1) ctx.drawText(textRenderer, lit(parts[1]), b.x + 8, b.y + 26, 0xFF8888AA, false);
+        int textW = b.w - 14 - (icon ? 20 : 0);
+        boolean two = parts.length > 1;
+        int ty = two ? b.y + (b.h - 20) / 2 : b.y + (b.h - 8) / 2;
+        ctx.drawText(textRenderer, Text.literal(fitText(parts[0], textW)), b.x + 8, ty, 0xFFFFFFFF, false);
+        if (two) ctx.drawText(textRenderer, Text.literal(fitText(parts[1], b.w - 14)), b.x + 8, ty + 12, hov ? 0xFFB8BACB : 0xFF8487A3, false);
     }
 
     private void drawToggleRow(DrawContext ctx, Btn b, boolean hov, int acc) {
@@ -875,9 +1012,8 @@ public class MenuScreen extends Screen {
     private void drawModCard(DrawContext ctx, Btn b, boolean hov, int acc) {
         int cat = CAT_COLORS[Math.floorMod(b.look, CAT_COLORS.length)];
         if (Config.get().mode3d) ctx.fill(b.x, b.y + 3, b.x + b.w, b.y + b.h + 3, 0xFF05050A);
-        ctx.fill(b.x + 1, b.y + 2, b.x + b.w + 1, b.y + b.h + 2, 0x44000000);
         box(ctx, b.x, b.y, b.w, b.h, hov ? acc : 0xFF2B2F42, hov ? 0xFF1F2336 : 0xFF161926, true);
-        ctx.fill(b.x + 1, b.y + 3, b.x + 4, b.y + b.h - 3, cat);
+        ctx.fill(b.x + 1, b.y + 3, b.x + 3, b.y + b.h - 3, cat);
         String label = b.label;
         int maxW = b.w - 44;
         while (label.length() > 3 && tw(label) > maxW) label = label.substring(0, label.length() - 2);
@@ -1644,17 +1780,16 @@ public class MenuScreen extends Screen {
         }
         bgA = 1f;
 
-        // header
-        ctx.fill(0, 0, W, 28, ao(0xDD0B0B14));
-        ctx.fill(0, 28, W, 29, acc);
-        ctx.fillGradient(0, 29, W, 33, (acc & 0x00FFFFFF) | 0x44000000, 0x00000000);
+        // header: calm bar, thin accent line
+        ctx.fill(0, 0, W, 28, ao(0xE60B0B14));
+        ctx.fill(0, 28, W, 29, (acc & 0x00FFFFFF) | 0xAA000000);
         ctx.drawTexture(RenderPipelines.GUI_TEXTURED, LOGO, 6, 4, 0f, 0f, 20, 20, 256, 256, 256, 256);
-        ctx.drawText(textRenderer, lit("XLetxzX Styles"), 32, 6, acc, true);
-        ctx.drawText(textRenderer, lit("v" + VERSION + " - 1.21.11"), 32, 17, 0xFF8888AA, false);
+        ctx.drawText(textRenderer, lit("XLetxzX Styles"), 32, 6, 0xFFFFFFFF, false);
+        ctx.drawText(textRenderer, lit("v" + VERSION + "  ·  1.21.11"), 32, 17, 0xFF7C7F9A, false);
 
         // bottom bar
-        ctx.fill(0, H - 24, W, H, 0xDD0B0B14);
-        ctx.fill(0, H - 24, W, H - 23, 0x33FFFFFF);
+        ctx.fill(0, H - 24, W, H, ao(0xE60B0B14));
+        ctx.fill(0, H - 24, W, H - 23, 0x1FFFFFFF);
         if (page == HOME) {
             int img = (W - 176) / 3;
             int boxH = H - 90;
@@ -1668,12 +1803,21 @@ public class MenuScreen extends Screen {
                 net.minecraft.entity.player.PlayerInventory inv = mc.player.getInventory();
                 int sel = inv.getSelectedSlot();
                 net.minecraft.item.ItemStack mainHand = inv.getStack(sel), offHand = inv.getStack(40);
+                int arrows = 0, stingers = 0;
                 try {
                     inv.setStack(sel, net.minecraft.item.ItemStack.EMPTY);
                     inv.setStack(40, net.minecraft.item.ItemStack.EMPTY);
+                    Core.call("setMenuPreview", true);   // plain skin: no fire, name tag, arrows ...
+                    arrows = mc.player.getStuckArrowCount();
+                    stingers = mc.player.getStingerCount();
+                    if (arrows != 0) mc.player.setStuckArrowCount(0);
+                    if (stingers != 0) mc.player.setStingerCount(0);
                     InventoryScreen.drawEntity(ctx, OX + 20, OY + 40, OX + 20 + img, OY + 40 + boxH,
                             sc, 0.0625f, emx, emy, mc.player);
                 } finally {
+                    Core.call("setMenuPreview", false);
+                    if (arrows != 0) mc.player.setStuckArrowCount(arrows);
+                    if (stingers != 0) mc.player.setStingerCount(stingers);
                     inv.setStack(sel, mainHand);
                     inv.setStack(40, offHand);
                 }
@@ -1809,7 +1953,8 @@ public class MenuScreen extends Screen {
             }
         }
 
-        for (Btn b : btns) drawBtn(ctx, b, mouseX, mouseY);
+        for (Btn b : new ArrayList<>(btns)) drawBtn(ctx, b, mouseX, mouseY);
+        if (tourStep >= 0 && page == HOME) drawTour(ctx, mouseX, mouseY, designClick, acc);
         if (page == SETTINGS) {
             for (int i = 0; i < LANG_CODES.length; i++) drawFlag(ctx, i, 23 + (i % 3) * 57, 247 + (i / 3) * 22);
         }
@@ -1868,10 +2013,12 @@ public class MenuScreen extends Screen {
             ctx.fill(W / 2 - nw / 2, H - 46, W / 2 - nw / 2 + 2, H - 30, acc);
             drawCentered(ctx, note, W / 2, H - 42, 0xFFFFD27A);
         }
-        ctx.fill(0, 0, W, 1, acc);
-        ctx.fill(0, H - 1, W, H, acc);
-        ctx.fill(0, 0, 1, H, acc);
-        ctx.fill(W - 1, 0, W, H, acc);
+        // thin, quiet window outline
+        int edge = (acc & 0x00FFFFFF) | 0x66000000;
+        ctx.fill(0, 0, W, 1, edge);
+        ctx.fill(0, H - 1, W, H, edge);
+        ctx.fill(0, 0, 1, H, edge);
+        ctx.fill(W - 1, 0, W, H, edge);
         ctx.getMatrices().popMatrix();
     }
 
