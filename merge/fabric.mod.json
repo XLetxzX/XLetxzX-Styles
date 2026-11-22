@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "xletxzx_styles",
+  "version": "${version}",
+  "name": "XLetxzX Styles",
+  "description": "All-in-one PvP client mod: menu with skin preview, 30 HUD modules, Spotify HUD and lyrics, PvP texture mixer, texture pack manager, tweaks and FPS boost.",
+  "authors": ["XLetxzX"],
+  "contact": { "homepage": "https://discord.gg/XLetxzX" },
+  "license": "All-Rights-Reserved",
+  "icon": "assets/xletxzx/icon.png",
+  "environment": "client",
+  "mixins": ["xletxzx_styles.mixins.json"],
+  "entrypoints": {
+    "client": ["de.xletxzx.styles.XLetxzXStyles", "de.xletxzx.visuals.XLetxzXVisuals"],
+    "modmenu": ["de.xletxzx.visuals.ModMenuEntry"]
+  },
+  "depends": {
+    "minecraft": "~1.21.11",
+    "fabricloader": ">=0.18.0",
+    "fabric-api": "*",
+    "java": ">=21"
+  },
+  "conflicts": { "xletxzx_menu": "*", "xletxzx_extras": "*" }
+}

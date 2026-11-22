@@ -1,0 +1,8 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "de.xletxzx.styles.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": ["EntityCullMixin", "AnimMixin", "FireMixin", "SelfStateMixin", "ArmorMixin", "ContainerScreenAccess", "ShieldMixin", "ItemPhysMixin", "GameRendererAccess", "ParticleMixin", "SoundMixin", "GlowMixin", "HandScaleMixin", "BlockParticleMixin", "ThirdItemMixin", "ItemStateScaleMixin", "GuiOpacityMixin", "LayerAlphaMixin", "OwnFireMixin"],
+  "injectors": { "defaultRequire": 0 }
+}

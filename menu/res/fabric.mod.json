@@ -1,0 +1,2 @@
+{ "schemaVersion": 1, "id": "xletxzx_styles_menu", "version": "1.0", "environment": "client",
+  "entrypoints": { "client": ["de.xletxzx.visuals.XLetxzXVisuals"] } }
