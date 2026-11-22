@@ -1,3 +1,0 @@
-{ "schemaVersion": 1, "id": "xletxzx_styles_core", "version": "1.0", "environment": "client",
-  "mixins": ["xletxzx_styles.mixins.json"],
-  "entrypoints": { "client": ["de.xletxzx.styles.XLetxzXStyles"] } }
